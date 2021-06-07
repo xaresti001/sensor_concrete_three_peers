@@ -123,6 +123,10 @@ fn sending_thread(){
     println!("Terminated.");
 }
 
+fn handle_client(stream: TcpStream){
+
+}
+
 fn receiving_thread(){
     let listener = TcpListener::bind("0.0.0.0:4444").unwrap();
     // accept connections and process them, spawning a new thread for each one
