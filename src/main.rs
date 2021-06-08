@@ -209,8 +209,8 @@ fn handle_client(stream: TcpStream){
         let stream_ref = reader.get_ref();
 
         match msg_code.code {
-            3 => received_code_3(stream_ref),
-            5 => received_code_5(stream_ref),
+            3 => received_code_3(stream_ref), // Receive Private Key request
+            5 => received_code_5(stream_ref), // Receive verification request
             _ => println!("Incorrect code received!!"),
         }
     }
