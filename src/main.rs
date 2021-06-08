@@ -80,6 +80,22 @@ fn send_ciphertext(mut stream : &TcpStream, ciphertext : VectorLWE, code_in : i3
     stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
 }
 
+fn send_secret_key(mut stream : &TcpStream){
+    // Prepare and send Message Code
+    let msg_code = ConcreteMessageCode {
+        code : 4 // VERIFY THIS CODE
+    };
+    stream.write(serde_json::to_string(&msg_code).unwrap().as_bytes()).unwrap();
+    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+
+    // Prepare and send Secret Key
+    let secret_key_msg = ConcreteSecretKey{
+        secret_key : load_secret_key()
+    };
+    stream.write(serde_json::to_string(&secret_key_msg).unwrap().as_bytes()).unwrap();
+    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+}
+
 fn encode_and_encrypt_message(message : &Vec<f64>, public_key : &LWESecretKey) -> VectorLWE{
     // Generate encoder
     let encoder = Encoder::new(40., 120., 8, 0).unwrap();
@@ -120,11 +136,84 @@ fn sending_thread(){
             println!("Failed to connect: {}", e);
         }
     }
-    println!("Terminated.");
+    println!("Sending thread terminated.");
+}
+
+fn receive_ciphertext(stream : &TcpStream) -> VectorLWE{
+    // RECEIVING MODULE
+    let mut reader = BufReader::new(stream);
+    let mut buffer = Vec::new();
+
+    buffer.clear();
+    let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
+
+    if read_bytes == 0 { // If there is no incoming data
+        return VectorLWE::zero(0, 0).unwrap();
+    }
+
+    // Deserialize
+    let ciphertext : ConcreteCiphertext = serde_json::from_slice(&buffer).unwrap();
+
+    // let stream : &TcpStream = reader.get_ref();
+    // save_ciphertext(stream, &ciphertext.message);
+    return ciphertext.message;
+}
+
+fn verify_ciphertext(ciphertext : VectorLWE) -> VectorLWE{
+    // Load KSK
+    let key_switching_key = load_key_switching_key();
+    // Perform Key Switch
+    let verified_ciphertext = ciphertext.keyswitch(&key_switching_key).unwrap();
+    return verified_ciphertext;
+}
+
+fn received_code_3(stream : &TcpStream){
+    println!("\n\n// SECRET KEY REQUEST //");
+    // Load and send Secret Key (SK2)
+    println!("Loading secret key...");
+    send_secret_key(stream);
+    println!("Secret key sent!");
+}
+
+fn received_code_5(stream : &TcpStream){
+    println!("\n\n// CIPHERTEXT VERIFICATION //");
+    // Verify received ciphertext
+    // Receive ciphertext
+    println!("Receiving ciphertext...");
+    let ciphertext = receive_ciphertext(stream);
+    // Verify ciphertext
+    println!("Verifying ciphertext...");
+    let verified_ciphertext = verify_ciphertext(ciphertext);
+    // Send verified ciphertext
+    println!("Sending verified ciphertext...");
+    send_ciphertext(stream, verified_ciphertext, 6);
+    println!("Verified ciphertext sent!");
 }
 
 fn handle_client(stream: TcpStream){
+    let mut reader = BufReader::new(stream);
+    let mut buffer = Vec::new();
 
+    loop{
+        buffer.clear(); // Flush remaining buffer content
+        println!("\n\nWaiting client message...");
+        let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
+
+        if read_bytes == 0 { // If there is no incoming data
+            return ();
+        }
+
+        let msg_code : ConcreteMessageCode = serde_json::from_slice(&buffer).unwrap();
+        println!("Received message-code: {:?}", msg_code.code);
+
+        let stream_ref = reader.get_ref();
+
+        match msg_code.code {
+            3 => received_code_3(stream_ref),
+            5 => received_code_5(stream_ref),
+            _ => println!("Incorrect code received!!"),
+        }
+    }
 }
 
 fn receiving_thread(){
@@ -155,13 +244,15 @@ fn main() {
     create_and_save_keys();
 
     // Create new thread
-    thread::spawn(|| {
+    let handler1 = thread::spawn(move || {
         sending_thread();
     });
 
     // Create new thread
-    thread::spawn(|| {
+    let handler2 = thread::spawn(move || {
         receiving_thread();
     });
 
+    handler1.join().unwrap();
+    handler2.join().unwrap();
 }
