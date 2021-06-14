@@ -94,7 +94,7 @@ fn send_secret_key(mut stream : &TcpStream){
 
 fn encode_and_encrypt_message(message : &Vec<f64>, public_key : &LWESecretKey) -> VectorLWE{
     // Generate encoder
-    let encoder = Encoder::new(40., 120., 8, 1).unwrap();
+    let encoder = Encoder::new(40., 120., 8, 2).unwrap();
     // Encrypt message
     let ciphertext = VectorLWE::encode_encrypt(public_key, message, &encoder).unwrap();
     return ciphertext;
