@@ -69,15 +69,13 @@ fn send_ciphertext(mut stream : &TcpStream, ciphertext : VectorLWE, code_in : i3
     let msg_code = ConcreteMessageCode {
         code : code_in
     };
-    stream.write(serde_json::to_string(&msg_code).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&msg_code).unwrap()).unwrap();
 
     // Prepare and send ciphertext
     let ciphertext_msg = ConcreteCiphertext {
         message : ciphertext
     };
-    stream.write(serde_json::to_string(&ciphertext_msg).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&ciphertext_msg).unwrap()).unwrap();
 }
 
 fn send_secret_key(mut stream : &TcpStream){
@@ -85,20 +83,18 @@ fn send_secret_key(mut stream : &TcpStream){
     let msg_code = ConcreteMessageCode {
         code : 4 // VERIFY THIS CODE
     };
-    stream.write(serde_json::to_string(&msg_code).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&msg_code).unwrap()).unwrap();
 
     // Prepare and send Secret Key
     let secret_key_msg = ConcreteSecretKey{
         secret_key : load_secret_key()
     };
-    stream.write(serde_json::to_string(&secret_key_msg).unwrap().as_bytes()).unwrap();
-    stream.write(b"\n").unwrap(); // Necessary in order to Stop reading or receiving data from
+    stream.write(&serde_json::to_vec(&secret_key_msg).unwrap()).unwrap();
 }
 
 fn encode_and_encrypt_message(message : &Vec<f64>, public_key : &LWESecretKey) -> VectorLWE{
     // Generate encoder
-    let encoder = Encoder::new(40., 120., 8, 0).unwrap();
+    let encoder = Encoder::new(40., 120., 8, 1).unwrap();
     // Encrypt message
     let ciphertext = VectorLWE::encode_encrypt(public_key, message, &encoder).unwrap();
     return ciphertext;
@@ -141,21 +137,8 @@ fn sending_thread(){
 
 fn receive_ciphertext(stream : &TcpStream) -> VectorLWE{
     // RECEIVING MODULE
-    let mut reader = BufReader::new(stream);
-    let mut buffer = Vec::new();
-
-    buffer.clear();
-    let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
-
-    if read_bytes == 0 { // If there is no incoming data
-        return VectorLWE::zero(0, 0).unwrap();
-    }
-
-    // Deserialize
-    let ciphertext : ConcreteCiphertext = serde_json::from_slice(&buffer).unwrap();
-
-    // let stream : &TcpStream = reader.get_ref();
-    // save_ciphertext(stream, &ciphertext.message);
+    let mut de = serde_json::Deserializer::from_reader(stream);
+    let ciphertext : ConcreteCiphertext= ConcreteCiphertext::deserialize(&mut de).unwrap();
     return ciphertext.message;
 }
 
@@ -191,26 +174,16 @@ fn received_code_5(stream : &TcpStream){
 }
 
 fn handle_client(stream: TcpStream){
-    let mut reader = BufReader::new(stream);
-    let mut buffer = Vec::new();
-
     loop{
-        buffer.clear(); // Flush remaining buffer content
         println!("\n\nWaiting client message...");
-        let read_bytes = reader.read_until(b'\n', &mut buffer).unwrap();
-
-        if read_bytes == 0 { // If there is no incoming data
-            return ();
-        }
-
-        let msg_code : ConcreteMessageCode = serde_json::from_slice(&buffer).unwrap();
+        // RECEIVING MODULE
+        let mut de = serde_json::Deserializer::from_reader(&stream);
+        let msg_code : ConcreteMessageCode= ConcreteMessageCode::deserialize(&mut de).unwrap();
         println!("Received message-code: {:?}", msg_code.code);
 
-        let stream_ref = reader.get_ref();
-
         match msg_code.code {
-            3 => received_code_3(stream_ref), // Receive Private Key request
-            5 => received_code_5(stream_ref), // Receive verification request
+            3 => received_code_3(&stream), // Receive Private Key request
+            5 => received_code_5(&stream), // Receive verification request
             _ => println!("Incorrect code received!!"),
         }
     }
