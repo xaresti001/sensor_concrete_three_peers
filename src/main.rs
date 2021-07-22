@@ -40,7 +40,7 @@ fn create_and_save_keys(){
     // Create keys
     let my_public_key = LWESecretKey::new(&LWE80_1024);
     let my_private_key = LWESecretKey::new(&LWE80_1024);
-    let my_change_key = crypto_api::LWEKSK::new(&my_public_key, &my_private_key, 10, 3);
+    let my_change_key = crypto_api::LWEKSK::new(&my_public_key, &my_private_key, 16, 2);
     println!("Saving keys...");
     // Save keys
     my_public_key.save("my_public_key.json").unwrap();
@@ -110,16 +110,17 @@ fn generate_and_send_message(stream : &TcpStream, public_key : &LWESecretKey){
 fn generate_random_message() -> Vec<f64>{
     let mut rng = rand::thread_rng();
     // let constants: Vec<f64> = (0..3).map(|_| rng.gen_range(45., 115.)).collect();
-    let constants : Vec<f64> = vec![60., 60., 60.];
+    //let constants : Vec<f64> = vec![60., 60., 60.];
+    let constants : Vec<f64> = vec![30., 60., 90.];
     println!("{:?}", constants);
     return constants;
 }
 
 fn send_info_loop(stream : &TcpStream){
     let public_key = load_public_key();
-    for i in 0..5{
+    for i in 0..50{
         generate_and_send_message(stream, &public_key);
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(50));
     }
 }
 
